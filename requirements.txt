@@ -1,0 +1,6 @@
+-e git://github.com/ihor-nahuliak/hubstaff.git#egg=hubstaff
+pytest
+pytest-flakes
+pytest-mock
+pytest-cov
+python-coveralls
