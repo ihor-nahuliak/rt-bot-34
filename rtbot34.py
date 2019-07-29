@@ -12,8 +12,6 @@ class HubstaffConfig:
     auth_token = None
     username = None
     password = None
-    report_section = 'report'
-    report_date = None
 
     def __init__(self, filename):
         self._filename = filename
