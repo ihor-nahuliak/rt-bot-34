@@ -1,3 +1,11 @@
+# Temporary
+.*
+!.gitignore
+!.requirements
+!.coveragerc
+!.coveralls.yml
+!.travis.yml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

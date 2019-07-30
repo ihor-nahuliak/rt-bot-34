@@ -1,0 +1,9 @@
+-r ./product.txt
+
+# testing env packages:
+pytest==5.0.1
+pytest-flakes==4.0.0
+pytest-mock==1.10.4
+pytest-cov==2.7.1
+python-coveralls==2.9.2
+coveralls==1.8.1

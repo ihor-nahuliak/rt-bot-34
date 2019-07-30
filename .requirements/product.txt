@@ -1,0 +1,3 @@
+# product env packages:
+-e git://github.com/ihor-nahuliak/hubstaff.git#egg=hubstaff
+marshmallow==2.19.5
