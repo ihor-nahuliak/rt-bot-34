@@ -1,4 +1,7 @@
 # rt-bot-34
+[![Build Status](https://travis-ci.org/ihor-nahuliak/rt-bot-34.svg?branch=master)](https://travis-ci.org/ihor-nahuliak/rt-bot-34)
+[![Coverage Status](https://coveralls.io/repos/github/ihor-nahuliak/rt-bot-34/badge.svg)](https://coveralls.io/github/ihor-nahuliak/rt-bot-34)
+
 Simple hubstaff activity report.
 
 Retrieve information from hubstaff V1 API about time worked on projects by employees of the test organization you are in and present it in a html table.
