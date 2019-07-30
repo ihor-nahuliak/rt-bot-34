@@ -2,10 +2,12 @@ import os
 import argparse
 import getpass
 import configparser
+import datetime
+from collections import defaultdict
 
 import marshmallow as ma
 from marshmallow import validate as vld
-# from hubstaff.client_v1 import HubstaffClient
+from hubstaff.client_v1 import HubstaffClient
 
 
 DEFAULT_CONFIG_FILENAME = '~/.rtbot34rc'
@@ -142,6 +144,89 @@ class Config:
         with open(self.filename, 'w+') as f:
             self._config.write(f)
 
+    @property
+    def report_date_from(self):
+        if self.report_date:
+            return self.report_date
+        report_date = (
+            datetime.datetime.now()
+                .replace(hour=0, minute=0, second=0, microsecond=0) - 
+            datetime.timedelta(days=self.report_days_ago)
+        )
+        return report_date
+
+    @property
+    def report_date_to(self):
+        return self.report_date_from + datetime.timedelta(days=1)
+
+
+class Command:
+    def __init__(self, **opts):
+        self._config = Config(**opts)
+        self._hubstaff = None
+
+    def _load_config(self):
+        self._config.load()
+
+    def _init_client(self):
+        self._hubstaff = HubstaffClient(
+            app_token=self._config.hubstaff_app_token,
+            auth_token=self._config.hubstaff_auth_token,
+            username=self._config.hubstaff_username,
+            password=self._config.hubstaff_password)
+        # set given auth_token to the config
+        self._config.hubstaff_auth_token = self._hubstaff.authenticate()
+
+    def _save_config(self):
+        self._config.save()
+
+    def _get_report_data(self, date_from, date_to):
+        report_data = {}
+
+        users_list = self._hubstaff.get_users_list(include_projects=True)
+
+        activities_list = self._hubstaff.get_activities_list(
+            date_from, date_to, user_id_list=[u['id'] for u in users_list])
+
+        spent_time = defaultdict(default_factory=lambda: 0)
+        for activity_item in activities_list:
+            spent_time[activity_item['project_id']] += activity_item['tracked']
+
+        for user_item in users_list:
+            report_data[(user_item['id'], user_item['name'])] = {
+                (project_item['id'], project_item['name']):
+                    spent_time.get(project_item['id'], 0)
+                for project_item in user_item['projects']
+            }
+
+        return report_data
+
+    def _save_report_to_html(self, data, filename):
+        rows = []
+        for user_id, user_name, project_data in data.items():
+            for project_id, project_name, project_spent in project_data.items():
+                rows.append({
+                    'user_id': user_id,
+                    'user_name': user_name,
+                    'project_id': project_id,
+                    'project_name': project_name,
+                    'project_spent': project_spent,
+                })
+        # TODO: dump with serializer & save to html
+
+    def _build_report(self):
+        report_data = self._get_report_data(
+            date_from=self._config.report_date_from,
+            date_to=self._config.report_date_to)
+        self._save_report_to_html(
+            data=report_data, filename=self._config.report_filename)
+
+    def handle(self):
+        self._load_config()
+        self._init_client()
+        self._save_config()
+        self._build_report()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -184,11 +269,4 @@ if __name__ == '__main__':
     if args.hubstaff_password:
         args.hubstaff_password = getpass.getpass('Password: ')
 
-    # to do steps:
-    # * load config
-    # * authenticate
-    # * save auth_token to the config
-    # * build report
-    config = Config(**args.__dict__)
-    config.load()
-    config.save()
+    Command(**args.__dict__).handle()
