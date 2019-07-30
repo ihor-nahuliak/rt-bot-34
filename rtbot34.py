@@ -201,7 +201,7 @@ class Command:
 
         return report_data
 
-    def _save_report_to_html(self, data, filename):
+    def _render_report_to_html(self, data):
         rows = []
         for user_id, user_name, project_data in data.items():
             for project_id, project_name, project_spent in project_data.items():
@@ -212,14 +212,23 @@ class Command:
                     'project_name': project_name,
                     'project_spent': project_spent,
                 })
-        # TODO: dump with serializer & save to html
+        # TODO: render html table
+        return ''
+
+    def _save_report_html_to_file(self, html, filename):
+        with open(filename, 'w+') as f:
+            f.write(html)
 
     def _build_report(self):
         report_data = self._get_report_data(
             date_from=self._config.report_date_from,
             date_to=self._config.report_date_to)
-        self._save_report_to_html(
-            data=report_data, filename=self._config.report_filename)
+        report_html = self._render_report_to_html(
+            data=report_data)
+        self._save_report_html_to_file(
+            html=report_html,
+            filename=self._config.report_filename)
+        # here you can add sending report html by email ...
 
     def handle(self):
         self._load_config()
