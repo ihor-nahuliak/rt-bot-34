@@ -5,6 +5,7 @@ import configparser
 import datetime
 from collections import defaultdict
 
+import jinja2
 import marshmallow as ma
 from marshmallow import validate as vld
 from hubstaff.client_v1 import HubstaffClient
@@ -181,41 +182,72 @@ class Command:
         self._config.save()
 
     def _get_report_data(self, date_from, date_to):
-        report_data = {}
-
         users_list = self._hubstaff.get_users_list(include_projects=True)
 
-        activities_list = self._hubstaff.get_activities_list(
-            date_from, date_to, user_id_list=[u['id'] for u in users_list])
+        users_dict = {}
+        projects_dict = {}
+        for user_item in users_list:
+            users_dict[user_item['id']] = user_item.copy()
+            for project_item in user_item['projects']:
+                projects_dict[project_item['id']] = project_item.copy()
+
+        activities_list = self._hubstaff.get_activities_list(date_from, date_to)
 
         spent_time = defaultdict(default_factory=lambda: 0)
         for activity_item in activities_list:
-            spent_time[activity_item['project_id']] += activity_item['tracked']
+            spent_time[
+                (activity_item['user_id'],
+                 activity_item['project_id'])
+            ] += activity_item['tracked']
 
-        for user_item in users_list:
-            report_data[(user_item['id'], user_item['name'])] = {
-                (project_item['id'], project_item['name']):
-                    spent_time.get(project_item['id'], 0)
-                for project_item in user_item['projects']
-            }
-
+        report_data = {
+            'date_from': date_from,
+            'date_to': date_from,
+            'users': users_dict,
+            'projects': projects_dict,
+            'spent_time': spent_time,
+        }
         return report_data
 
-    def _render_report_to_html(self, data):
-        rows = []
-        for user_id, user_name, project_data in data.items():
-            for project_id, project_name, project_spent in project_data.items():
-                rows.append({
-                    'user_id': user_id,
-                    'user_name': user_name,
-                    'project_id': project_id,
-                    'project_name': project_name,
-                    'project_spent': project_spent,
-                })
-        # TODO: render html table
-        return ''
+    @classmethod
+    def _render_report_to_html(cls, data):
+        template = jinja2.Template('''<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>rt-bot-34 report {{ date_from }} - {{ date_to }}</title>
+  </head>
+  <body>
+    <h1>{{ date_from }} - {{ date_to }}</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>&nbsp;</th>
+        {% for user_id, user in users.items() %}
+          <th>{{ user.name }}</th>
+        {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for project_id, project in projects.items() %}
+        <tr>
+          <td>{{ project.name }}</td>
+        {% for user_id, user in users.items() %}
+          <td>{{ spent_time[(user_id, project_id)] }}</td>
+        {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
+''')
+        html = template.render(**data)
+        return html
 
-    def _save_report_html_to_file(self, html, filename):
+    @classmethod
+    def _save_report_html_to_file(cls, html, filename):
         with open(filename, 'w+') as f:
             f.write(html)
 
