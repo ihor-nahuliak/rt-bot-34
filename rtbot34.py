@@ -1,10 +1,14 @@
 import os
 import argparse
 import getpass
-import configparser
-import datetime
 import logging
+from datetime import datetime, timedelta
 from collections import defaultdict
+
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 
 import jinja2
 import marshmallow as ma
@@ -151,14 +155,14 @@ class Config:
     def report_date_from(self):
         if self.report_date:
             return self.report_date
-        today = datetime.datetime.now().replace(
+        today = datetime.now().replace(
             hour=0, minute=0, second=0, microsecond=0)
-        date_from = today - datetime.timedelta(days=self.report_days_ago)
+        date_from = today - timedelta(days=self.report_days_ago)
         return date_from
 
     @property
     def report_date_to(self):
-        date_to = self.report_date_from + datetime.timedelta(days=1)
+        date_to = self.report_date_from + timedelta(days=1)
         return date_to
 
 
