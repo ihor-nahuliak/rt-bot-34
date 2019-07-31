@@ -2,10 +2,15 @@ import os
 import argparse
 import getpass
 import configparser
+import datetime
+import logging
+from collections import defaultdict
 
+import jinja2
 import marshmallow as ma
 from marshmallow import validate as vld
-# from hubstaff.client_v1 import HubstaffClient
+from hubstaff.client_v1 import HubstaffClient
+from hubstaff.exceptions import HubstaffAuthError
 
 
 DEFAULT_CONFIG_FILENAME = '~/.rtbot34rc'
@@ -142,6 +147,141 @@ class Config:
         with open(self.filename, 'w+') as f:
             self._config.write(f)
 
+    @property
+    def report_date_from(self):
+        if self.report_date:
+            return self.report_date
+        today = datetime.datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0)
+        date_from = today - datetime.timedelta(days=self.report_days_ago)
+        return date_from
+
+    @property
+    def report_date_to(self):
+        date_to = self.report_date_from + datetime.timedelta(days=1)
+        return date_to
+
+
+class Command:
+    def __init__(self, **opts):
+        self._logger = logging.getLogger(__name__)
+        self._logger.setLevel(logging.WARNING)
+        self._config = Config(**opts)
+        self._hubstaff = None
+
+    def _load_config(self):
+        self._config.load()
+
+    def _init_client(self):
+        self._hubstaff = HubstaffClient(
+            app_token=self._config.hubstaff_app_token,
+            auth_token=self._config.hubstaff_auth_token,
+            username=self._config.hubstaff_username,
+            password=self._config.hubstaff_password)
+        # set given auth_token to the config
+        self._config.hubstaff_auth_token = self._hubstaff.authenticate()
+
+    def _save_config(self):
+        self._config.save()
+
+    def _get_report_data(self, date_from, date_to):
+        users_list = self._hubstaff.get_users_list(include_projects=True)
+
+        users_dict = {}
+        projects_dict = {}
+        for user_item in users_list:
+            users_dict[user_item['id']] = {
+                'id': user_item['id'],
+                'name': user_item['name'],
+            }
+            for project_item in user_item['projects']:
+                projects_dict[project_item['id']] = {
+                    'id': project_item['id'],
+                    'name': project_item['name'],
+                }
+
+        activities_list = self._hubstaff.get_activities_list(date_from, date_to)
+
+        spent_time_dict = defaultdict(lambda: 0)
+        for activity_item in activities_list:
+            spent_time_dict[
+                (activity_item['user_id'],
+                 activity_item['project_id'])
+            ] += activity_item['tracked']
+
+        report_data = {
+            'date_from': date_from,
+            'date_to': date_to,
+            'users': users_dict,
+            'projects': projects_dict,
+            'spent_time': spent_time_dict,
+        }
+        return report_data
+
+    @classmethod
+    def _render_report_to_html(cls, data):
+        template = jinja2.Template('''<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>rt-bot-34 report {{ date_from }} - {{ date_to }}</title>
+  </head>
+  <body>
+    <h1>{{ date_from }} - {{ date_to }}</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>&nbsp;</th>
+        {% for user_id, user in users.items() %}
+          <th>{{ user.name }}</th>
+        {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for project_id, project in projects.items() %}
+        <tr>
+          <td>{{ project.name }}</td>
+        {% for user_id, user in users.items() %}
+          <td>{{ spent_time.get((user_id, project_id), 0) }}</td>
+        {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
+''')
+        html = template.render(**data)
+        return html
+
+    @classmethod
+    def _save_report_html_to_file(cls, html, filename):
+        with open(filename, 'w+') as f:
+            f.write(html)
+
+    def _build_report(self):
+        report_data = self._get_report_data(
+            date_from=self._config.report_date_from,
+            date_to=self._config.report_date_to)
+        report_html = self._render_report_to_html(
+            data=report_data)
+        self._save_report_html_to_file(
+            html=report_html,
+            filename=self._config.report_filename)
+        # here you can add sending report html by email ...
+
+    def handle(self):
+        try:
+            self._load_config()
+            self._init_client()
+            self._save_config()
+            self._build_report()
+        except HubstaffAuthError:
+            self._logger.error('hubstaff error: authentication failed')
+        except ma.ValidationError as e:
+            self._logger.error('validation error: %s' % e.messages)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -184,11 +324,4 @@ if __name__ == '__main__':
     if args.hubstaff_password:
         args.hubstaff_password = getpass.getpass('Password: ')
 
-    # to do steps:
-    # * load config
-    # * authenticate
-    # * save auth_token to the config
-    # * build report
-    config = Config(**args.__dict__)
-    config.load()
-    config.save()
+    Command(**args.__dict__).handle()
