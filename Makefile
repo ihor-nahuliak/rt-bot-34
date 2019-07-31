@@ -3,7 +3,7 @@
 DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 SHELL=/bin/bash
 
-GLOBAL_PYTHON = /usr/bin/python3.7
+GLOBAL_PYTHON = /usr/bin/python2.7
 ENV := $(DIR)/env/bin
 PYTHON := $(ENV)/python
 PIP := $(ENV)/pip
