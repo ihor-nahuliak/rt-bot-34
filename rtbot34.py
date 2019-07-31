@@ -193,7 +193,7 @@ class Command:
 
         activities_list = self._hubstaff.get_activities_list(date_from, date_to)
 
-        spent_time = defaultdict(default_factory=lambda: 0)
+        spent_time = defaultdict(lambda: 0)
         for activity_item in activities_list:
             spent_time[
                 (activity_item['user_id'],
@@ -234,7 +234,7 @@ class Command:
         <tr>
           <td>{{ project.name }}</td>
         {% for user_id, user in users.items() %}
-          <td>{{ spent_time[(user_id, project_id)] }}</td>
+          <td>{{ spent_time.get((user_id, project_id), 0) }}</td>
         {% endfor %}
         </tr>
       {% endfor %}
