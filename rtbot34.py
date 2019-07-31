@@ -3,12 +3,14 @@ import argparse
 import getpass
 import configparser
 import datetime
+import logging
 from collections import defaultdict
 
 import jinja2
 import marshmallow as ma
 from marshmallow import validate as vld
 from hubstaff.client_v1 import HubstaffClient
+from hubstaff.exceptions import HubstaffAuthError
 
 
 DEFAULT_CONFIG_FILENAME = '~/.rtbot34rc'
@@ -149,20 +151,21 @@ class Config:
     def report_date_from(self):
         if self.report_date:
             return self.report_date
-        report_date = (
-            datetime.datetime.now()
-                .replace(hour=0, minute=0, second=0, microsecond=0) - 
-            datetime.timedelta(days=self.report_days_ago)
-        )
-        return report_date
+        today = datetime.datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0)
+        date_from = today - datetime.timedelta(days=self.report_days_ago)
+        return date_from
 
     @property
     def report_date_to(self):
-        return self.report_date_from + datetime.timedelta(days=1)
+        date_to = self.report_date_from + datetime.timedelta(days=1)
+        return date_to
 
 
 class Command:
     def __init__(self, **opts):
+        self._logger = logging.getLogger(__name__)
+        self._logger.setLevel(logging.WARNING)
         self._config = Config(**opts)
         self._hubstaff = None
 
@@ -187,25 +190,31 @@ class Command:
         users_dict = {}
         projects_dict = {}
         for user_item in users_list:
-            users_dict[user_item['id']] = user_item.copy()
+            users_dict[user_item['id']] = {
+                'id': user_item['id'],
+                'name': user_item['name'],
+            }
             for project_item in user_item['projects']:
-                projects_dict[project_item['id']] = project_item.copy()
+                projects_dict[project_item['id']] = {
+                    'id': project_item['id'],
+                    'name': project_item['name'],
+                }
 
         activities_list = self._hubstaff.get_activities_list(date_from, date_to)
 
-        spent_time = defaultdict(lambda: 0)
+        spent_time_dict = defaultdict(lambda: 0)
         for activity_item in activities_list:
-            spent_time[
+            spent_time_dict[
                 (activity_item['user_id'],
                  activity_item['project_id'])
             ] += activity_item['tracked']
 
         report_data = {
             'date_from': date_from,
-            'date_to': date_from,
+            'date_to': date_to,
             'users': users_dict,
             'projects': projects_dict,
-            'spent_time': spent_time,
+            'spent_time': spent_time_dict,
         }
         return report_data
 
@@ -263,10 +272,15 @@ class Command:
         # here you can add sending report html by email ...
 
     def handle(self):
-        self._load_config()
-        self._init_client()
-        self._save_config()
-        self._build_report()
+        try:
+            self._load_config()
+            self._init_client()
+            self._save_config()
+            self._build_report()
+        except HubstaffAuthError:
+            self._logger.error('hubstaff error: authentication failed')
+        except ma.ValidationError as e:
+            self._logger.error('validation error: %s' % e.messages)
 
 
 if __name__ == '__main__':
