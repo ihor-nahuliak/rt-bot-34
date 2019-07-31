@@ -1,4 +1,8 @@
-import unittest
+try:
+    import unittest
+except ImportError:
+    import unittest2 as unittest
+
 import os
 
 from rtbot34 import normalize_path

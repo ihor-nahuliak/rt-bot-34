@@ -1,5 +1,10 @@
-import unittest
-from unittest import mock
+try:
+    import unittest
+    from unittest import mock
+except ImportError:
+    import unittest2 as unittest
+    import mock
+
 import os
 import logging
 import datetime

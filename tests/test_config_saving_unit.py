@@ -1,4 +1,8 @@
-import unittest
+try:
+    import unittest
+except ImportError:
+    import unittest2 as unittest
+
 import os
 import datetime
 
@@ -46,18 +50,17 @@ days_ago=2
         with open(self.config_filename) as f:
             config_text = f.read()
 
-        self.assertEqual(config_text, '''[hubstaff]
+        self.assertIn('''[hubstaff]
 app_token = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 auth_token = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 username = test@hubstaff.com
 password = test123456
-
-[report]
+''', config_text)
+        self.assertIn('''[report]
 html_file = /tmp/.test.html
 date = 2001-02-03
 days_ago = 3
-
-''')
+''', config_text)
 
 
 if __name__ == '__main__':

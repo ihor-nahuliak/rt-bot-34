@@ -1,10 +1,14 @@
 import os
 import argparse
 import getpass
-import configparser
-import datetime
 import logging
+from datetime import datetime, timedelta
 from collections import defaultdict
+
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 
 import jinja2
 import marshmallow as ma
@@ -112,17 +116,23 @@ class Config:
         try:
             with open(self.filename, 'r') as f:
                 try:
-                    self._config.read_file(f)
+                    if hasattr(self._config, 'read_file'):
+                        self._config.read_file(f)
+                    else:
+                        self._config.readfp(f)  # python 2.7
                 except configparser.MissingSectionHeaderError:
                     pass  # bad file format
         except IOError:
             pass  # file not found or can't be open
         for section_name, schema_class in self.sections.items():
-            try:
-                section_data = self._config[section_name]
-            except (KeyError, configparser.NoSectionError):
-                section_data = {}
             schema = schema_class(strict=True)
+            section_data = {}
+            for _, field in schema.fields.items():
+                try:
+                    section_data[field.load_from] = self._config.get(
+                        section_name, field.load_from)
+                except (KeyError, configparser.NoSectionError):
+                    pass
             schema_data = {}
             for field_name, field in schema.fields.items():
                 value = (
@@ -138,12 +148,12 @@ class Config:
 
     def save(self):
         for section_name, schema_class in self.sections.items():
-            if section_name not in self._config:
-                self._config[section_name] = {}
+            if section_name not in self._config.sections():
+                self._config.add_section(section_name)
             schema = schema_class(strict=True)
             dumped_data, _ = schema.dump(self)
             for key, value in dumped_data.items():
-                self._config[section_name][key] = value or ''
+                self._config.set(section_name, key, value or '')
         with open(self.filename, 'w+') as f:
             self._config.write(f)
 
@@ -151,14 +161,14 @@ class Config:
     def report_date_from(self):
         if self.report_date:
             return self.report_date
-        today = datetime.datetime.now().replace(
+        today = datetime.now().replace(
             hour=0, minute=0, second=0, microsecond=0)
-        date_from = today - datetime.timedelta(days=self.report_days_ago)
+        date_from = today - timedelta(days=self.report_days_ago)
         return date_from
 
     @property
     def report_date_to(self):
-        date_to = self.report_date_from + datetime.timedelta(days=1)
+        date_to = self.report_date_from + timedelta(days=1)
         return date_to
 
 
